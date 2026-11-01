@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS P2P Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #07090e; 
+            color: #f3f4f6; 
+            padding-bottom: 70px; /* Защита от перекрытия плашкой хостинга снизу */
+            margin: 0;
+        }
+        .glass { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glass-card { background: rgba(22, 27, 34, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .gold-gradient { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .gold-text { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        /* Мобильный адаптив для таблиц */
+        @media (max-width: 768px) {
+            table, .table-container, .main-container {
+                width: 100% !important;
+                box-sizing: border-box;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-amber-500 selection:text-black">
+
+    <!-- Main App Container -->
+    <div id="app-container" class="flex flex-col min-h-screen">
+        <!-- Header -->
+        <header class="glass sticky top-0 z-40 border-b border-white/10 px-4 lg:px-8 py-4">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl gold-gradient flex items-center justify-center shadow-lg shadow-amber-500/10">
+                        <i data-lucide="zap" class="w-5 h-5 text-black"></i>
+                    </div>
+                    <div>
+                        <span class="text-lg font-bold tracking-tight text-white">NEXUS <span class="gold-text">P2P</span></span>
+                        <div class="flex items-center gap-2 text-xs text-emerald-400">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>Secure Node Live</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+                    <div class="glass-card px-4 py-2 rounded-xl flex items-center gap-3">
+                        <div class="text-right">
+                            <div class="text-[10px] text-gray-400 uppercase tracking-wider">Vault Balance</div>
+                            <div id="header-balance" class="text-sm font-bold text-white">0.00 USDT</div>
+                        </div>
+                        <button onclick="openModal('deposit')" class="gold-gradient text-black text-xs font-semibold px-3 py-1.5 rounded-lg hover:opacity-90 transition flex items-center gap-1">
+                            <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i> Пополнить
+                        </button>
+                        <button onclick="openModal('withdraw')" class="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1 border border-white/10">
+                            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> Вывести
+                        </button>
+                    </div>
+                    <button onclick="openModal('create-ad')" class="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold px-3 py-2 rounded-xl hover:bg-amber-500/20 transition flex items-center gap-1.5">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i> Свое объявление
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Body -->
+        <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+            <!-- Controls Bar -->
+            <div class="glass p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                    <button onclick="setTab('buy')" id="tab-buy" class="px-5 py-2.5 rounded-xl text-sm font-semibold transition bg-emerald-500 text-black shadow-lg shadow-emerald-500/20">Купить крипту</button>
+                    <button onclick="setTab('sell')" id="tab-sell" class="px-5 py-2.5 rounded-xl text-sm font-semibold transition text-gray-400 hover:text-white">Продать крипту</button>
+                </div>
+
+                <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
+                    <div id="crypto-tabs" class="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/10"></div>
+                    <select id="fiat-select" onchange="updateFilters()" class="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                        <option value="UAH">UAH ₴</option>
+                        <option value="USD">USD $</option>
+                        <option value="EUR">EUR €</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Orders Table Container -->
+            <div class="glass rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[700px]">
+                        <thead>
+                            <tr class="border-b border-white/10 text-xs font-semibold text-gray-400 bg-white/[0.02]">
+                                <th class="p-4">Мерчант</th>
+                                <th class="p-4">Цена / Спред</th>
+                                <th class="p-4">Лимиты / Доступно</th>
+                                <th class="p-4">Оплата</th>
+                                <th class="p-4 text-right">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-tbody" class="divide-y divide-white/5 text-sm"></tbody>
+                    </table>
+                </div>
+                <!-- Pagination -->
+                <div class="p-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-400 bg-black/20">
+                    <span id="pagination-info">Показано ордеров</span>
+                    <div class="flex gap-1.5 flex-wrap" id="pagination-buttons"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals Container -->
+    <!-- Deposit Modal -->
+    <div id="modal-deposit" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass max-w-md w-full p-6 rounded-2xl space-y-5 relative">
+            <button onclick="closeModal('deposit')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="arrow-down-left" class="text-amber-400"></i> Пополнение счета</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Выберите сеть</label>
+                    <select id="deposit-network" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                        <option value="TRC20">USDT (TRC20)</option>
+                        <option value="ERC20">USDT (ERC20)</option>
+                        <option value="BEP20">USDT (BEP20)</option>
+                        <option value="TON">USDT (TON)</option>
+                        <option value="SOL">USDT (SOL)</option>
+                        <option value="BTC">Bitcoin (BTC)</option>
+                        <option value="ETH">Ethereum (ETH)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Адрес кошелька для пополнения</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="deposit-address" readonly class="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 select-all">
+                        <button onclick="copyDepositAddress()" class="glass-card px-3 rounded-xl hover:bg-white/10 text-white"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Сумма пополнения (Мин. 30)</label>
+                    <input type="number" id="deposit-amount-input" min="30" placeholder="30.00" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                    <p id="deposit-warning" class="text-xs text-red-400 mt-1 hidden">Минимальная сумма пополнения составляет 30</p>
+                </div>
+
+                <div id="deposit-status-area" class="hidden text-center py-4 space-y-2">
+                    <div class="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p class="text-xs text-amber-400">Ожидание подтверждения блокчейн сети...</p>
+                </div>
+
+                <button id="deposit-submit-btn" onclick="submitDeposit()" class="w-full gold-gradient text-black font-semibold py-3 rounded-xl shadow-lg hover:opacity-90 transition">Я оплатил / Подтвердить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Withdraw Modal -->
+    <div id="modal-withdraw" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass max-w-md w-full p-6 rounded-2xl space-y-5 relative">
+            <button onclick="closeModal('withdraw')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="arrow-up-right" class="text-emerald-400"></i> Вывод средств</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Сеть / Активы</label>
+                    <select id="withdraw-network" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                        <option value="TRC20">USDT (TRC20)</option>
+                        <option value="ERC20">USDT (ERC20)</option>
+                        <option value="TON">USDT (TON)</option>
+                        <option value="BTC">Bitcoin (BTC)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Адрес получателя</label>
+                    <input type="text" id="withdraw-address" placeholder="Введите адрес кошелька..." class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50 font-mono">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Сумма (Мин. 30)</label>
+                    <input type="number" id="withdraw-amount" min="30" placeholder="30.00" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                </div>
+                <button onclick="processWithdraw()" class="w-full bg-emerald-500 text-black font-semibold py-3 rounded-xl shadow-lg hover:opacity-90 transition">Подтвердить вывод</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Ad Modal -->
+    <div id="modal-create-ad" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass max-w-md w-full p-6 rounded-2xl space-y-5 relative">
+            <button onclick="closeModal('create-ad')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="plus-circle" class="text-amber-400"></i> Создать объявление</h3>
+            <div id="ad-error-banner" class="hidden bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-xl"></div>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-400 mb-1 block">Тип</label>
+                        <select id="ad-type" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                            <option value="sell">Продать крипту</option>
+                            <option value="buy">Купить крипту</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 mb-1 block">Актив</label>
+                        <select id="ad-crypto" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                            <option value="USDT">USDT</option>
+                            <option value="BTC">BTC</option>
+                            <option value="ETH">ETH</option>
+                            <option value="TON">TON</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Курс (Цена за 1 ед.)</label>
+                    <input type="number" id="ad-price" placeholder="41.45" class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Лимиты (Мин. баланс для создания: 30 USDT)</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" id="ad-min" placeholder="Мин. сумма" class="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                        <input type="number" id="ad-max" placeholder="Макс. сумма" class="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+                    </div>
+                </div>
+                <button onclick="publishAd()" class="w-full gold-gradient text-black font-semibold py-3 rounded-xl shadow-lg hover:opacity-90 transition">Опубликовать (Требуется мин. баланс 30)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade / Escrow Modal -->
+    <div id="modal-trade" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass max-w-lg w-full p-6 rounded-2xl space-y-5 relative">
+            <button onclick="closeModal('trade')" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <div id="trade-content" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            initApp();
+        });
+
+        let state = {
+            balance: 0.00,
+            activeTab: 'buy',
+            crypto: 'USDT',
+            fiat: 'UAH',
+            page: 1,
+            perPage: 15,
+            orders: { buy: {}, sell: {} },
+            selectedOrder: null
+        };
+
+        const cryptoList = [
+            { id: 'USDT', name: 'USDT', basePrice: 41.45 },
+            { id: 'BTC', name: 'BTC', basePrice: 92500.00 },
+            { id: 'ETH', name: 'ETH', basePrice: 3150.00 },
+            { id: 'TON', name: 'TON', basePrice: 5.40 }
+        ];
+
+        const firstNames = [
+            "Dmytro", "Oleksandr", "Maxim", "Bohdan", "Artem", "Vladyslav", "Andrii", "Denys", "Ihor", "Mykola",
+            "Serhii", "Pavlo", "Yevhen", "Vitalii", "Roman", "Taras", "Oleh", "Yurii", "Ivan", "Stepan",
+            "Nazar", "Stas", "Danil", "Timur", "Mark", "Matvii", "Kyrylo", "Glib", "Vsevolod", "Arthur",
+            "Satoshi", "Nexus", "Apex", "Prime", "Black", "Titan", "Quantum", "Vector", "Sovereign", "Alpha"
+        ];
+
+        const lastNames = [
+            "Trader", "Exchanger", "P2P_Hub", "Capital", "Vault", "Escrow", "Node", "Fast", "Secure", "Cash",
+            "Gold", "Liquid", "Prime", "Pro", "Direct", "Instant", "Trust", "Pay", "Bank", "Service",
+            "Kyiv", "Dnipro", "Lviv", "Odesa", "Kharkiv", "Zaporizhzhia", "Vinnytsia", "Poltava", "Sumy", "Cherkasy"
+        ];
+
+        const paymentMethods = ["Monobank", "Privat24", "PUMB", "Cash in Kyiv", "SEPA Transfer", "Revolut", "Visa/Mastercard"];
+
+        function initApp() {
+            renderCryptoTabs();
+            generateOrders();
+            updateUI();
+            setInterval(livePriceTicker, 3500);
+            lucide.createIcons();
+        }
+
+        function renderCryptoTabs() {
+            const container = document.getElementById('crypto-tabs');
+            container.innerHTML = cryptoList.map(c => `
+                <button onclick="setCrypto('${c.id}')" id="crypto-btn-${c.id}" class="px-4 py-2 rounded-lg text-xs font-semibold transition ${state.crypto === c.id ? 'bg-amber-500 text-black shadow' : 'text-gray-400 hover:text-white'}">${c.name}</button>
+            `).join('');
+        }
+
+        function generateOrders() {
+            cryptoList.forEach(crypto => {
+                state.orders.buy[crypto.id] = [];
+                state.orders.sell[crypto.id] = [];
+
+                for (let i = 1; i <= 150; i++) {
+                    const fName = firstNames[Math.floor(Math.random() * firstNames.length)];
+                    const lName = lastNames[Math.floor(Math.random() * lastNames.length)];
+                    const merchant = `${fName}_${lName}_${Math.floor(Math.random() * 89 + 10)}`;
+                    
+                    const markup = 0.005 + Math.random() * 0.018;
+                    const price = Number((crypto.basePrice * (1 + markup)).toFixed(crypto.basePrice > 100 ? 2 : 2));
+                    
+                    state.orders.buy[crypto.id].push({
+                        id: `buy-${crypto.id}-${i}`,
+                        merchant,
+                        price,
+                        limitsMin: Math.floor(Math.random() * 1500 + 500),
+                        limitsMax: Math.floor(Math.random() * 50000 + 15000),
+                        available: Math.floor(Math.random() * 7000 + 300),
+                        payment: paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
+                        successRate: (98 + Math.random() * 1.9).toFixed(1),
+                        tradesCount: Math.floor(Math.random() * 4500 + 150),
+                        spread: markup
+                    });
+                }
+
+                for (let i = 1; i <= 150; i++) {
+                    const fName = firstNames[Math.floor(Math.random() * firstNames.length)];
+                    const lName = lastNames[Math.floor(Math.random() * lastNames.length)];
+                    const merchant = `${fName}_${lName}_${Math.floor(Math.random() * 89 + 10)}`;
+                    
+                    const discount = -(0.005 + Math.random() * 0.018);
+                    const price = Number((crypto.basePrice * (1 + discount)).toFixed(crypto.basePrice > 100 ? 2 : 2));
+                    
+                    state.orders.sell[crypto.id].push({
+                        id: `sell-${crypto.id}-${i}`,
+                        merchant,
+                        price,
+                        limitsMin: Math.floor(Math.random() * 1500 + 500),
+                        limitsMax: Math.floor(Math.random() * 50000 + 15000),
+                        available: Math.floor(Math.random() * 7000 + 300),
+                        payment: paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
+                        successRate: (98 + Math.random() * 1.9).toFixed(1),
+                        tradesCount: Math.floor(Math.random() * 4500 + 150),
+                        spread: discount
+                    });
+                }
+            });
+        }
+
+        function livePriceTicker() {
+            if(!state.orders[state.activeTab][state.crypto]) return;
+            state.orders[state.activeTab][state.crypto].forEach(order => {
+                const delta = (Math.random() * 0.002 - 0.001);
+                order.price = Number((order.price * (1 + delta)).toFixed(2));
+            });
+            renderOrdersTable();
+        }
+
+        function setTab(tab) {
+            state.activeTab = tab;
+            state.page = 1;
+            
+            const btnBuy = document.getElementById('tab-buy');
+            const btnSell = document.getElementById('tab-sell');
+            
+            if (tab === 'buy') {
+                btnBuy.className = 'px-5 py-2.5 rounded-xl text-sm font-semibold transition bg-emerald-500 text-black shadow-lg shadow-emerald-500/25';
+                btnSell.className = 'px-5 py-2.5 rounded-xl text-sm font-semibold transition text-gray-400 hover:text-white';
+            } else {
+                btnSell.className = 'px-5 py-2.5 rounded-xl text-sm font-semibold transition bg-rose-500 text-black shadow-lg shadow-rose-500/25';
+                btnBuy.className = 'px-5 py-2.5 rounded-xl text-sm font-semibold transition text-gray-400 hover:text-white';
+            }
+            renderOrdersTable();
+        }
+
+        function setCrypto(cryptoId) {
+            state.crypto = cryptoId;
+            state.page = 1;
+            renderCryptoTabs();
+            renderOrdersTable();
+        }
+
+        function updateFilters() {
+            state.fiat = document.getElementById('fiat-select').value;
+            renderOrdersTable();
+        }
+
+        function renderOrdersTable() {
+            const tbody = document.getElementById('orders-tbody');
+            const allOrders = state.orders[state.activeTab][state.crypto] || [];
+            const start = (state.page - 1) * state.perPage;
+            const pageOrders = allOrders.slice(start, start + state.perPage);
+
+            tbody.innerHTML = pageOrders.map(o => `
+                <tr class="hover:bg-white/[0.03] transition">
+                    <td class="p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-xs text-amber-400">${o.merchant[0]}</div>
+                            <div>
+                                <div class="font-semibold text-white flex items-center gap-1">${o.merchant} <span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">PRO</span></div>
+                                <div class="text-xs text-gray-400">${o.successRate}% выполнено • ${o.tradesCount.toLocaleString()} сделок</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="p-4">
+                        <div class="font-bold text-white text-base">${o.price.toLocaleString()} <span class="text-xs font-normal text-gray-400">${state.fiat}</span></div>
+                        <div class="text-xs ${state.activeTab === 'buy' ? 'text-emerald-400' : 'text-rose-400'}">${state.activeTab === 'buy' ? 'Выше рынка' : 'Ниже рынка'}</div>
+                    </td>
+                    <td class="p-4">
+                        <div class="text-xs text-white font-medium">Доступно: ${o.available.toLocaleString()} ${state.crypto}</div>
+                        <div class="text-xs text-gray-400">Лимиты: ${o.limitsMin.toLocaleString()} - ${o.limitsMax.toLocaleString()} ${state.fiat}</div>
+                    </td>
+                    <td class="p-4">
+                        <span class="inline-block bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-xs text-gray-300 font-medium">${o.payment}</span>
+                    </td>
+                    <td class="p-4 text-right">
+                        <button onclick="openTradeModal('${o.id}')" class="px-4 py-2 rounded-xl text-xs font-semibold ${state.activeTab === 'buy' ? 'bg-emerald-500 hover:bg-emerald-400 text-black' : 'bg-rose-500 hover:bg-rose-400 text-black'} transition shadow-lg">
+                            ${state.activeTab === 'buy' ? 'Купить' : 'Продать'} ${state.crypto}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            const totalPages = Math.ceil(allOrders.length / state.perPage);
+            document.getElementById('pagination-info').innerText = `Ордер ${start + 1}-${Math.min(start + state.perPage, allOrders.length)} из ${allOrders.length}`;
+            
+            let pButtons = '';
+            for(let i=1; i<=Math.min(6, totalPages); i++) {
+                pButtons += `<button onclick="changePage(${i})" class="px-3 py-1.5 rounded-lg text-xs border ${state.page === i ? 'bg-amber-500 text-black border-amber-500' : 'bg-black/40 text-gray-400 border-white/10'}">${i}</button>`;
+            }
+            document.getElementById('pagination-buttons').innerHTML = pButtons;
+            lucide.createIcons();
+        }
+
+        function changePage(p) {
+            state.page = p;
+            renderOrdersTable();
+        }
+
+        function updateUI() {
+            document.getElementById('header-balance').innerText = `${state.balance.toFixed(2)} USDT`;
+        }
+
+        function openModal(name) {
+            document.getElementById(`modal-${name}`).classList.remove('hidden');
+            document.getElementById(`modal-${name}`).classList.add('flex');
+            if(name === 'deposit') {
+                const net = document.getElementById('deposit-network').value;
+                document.getElementById('deposit-address').value = getWalletAddress(net);
+            }
+        }
+
+        function closeModal(name) {
+            document.getElementById(`modal-${name}`).classList.add('hidden');
+            document.getElementById(`modal-${name}`).classList.remove('flex');
+        }
+
+        document.getElementById('deposit-network').addEventListener('change', (e) => {
+            document.getElementById('deposit-address').value = getWalletAddress(e.target.value);
+        });
+
+        function getWalletAddress(net) {
+            const addresses = {
+                'TRC20': 'TNBZddPNDAurPspZZgG3Z8PbUrGKxVmNdP',
+                'ERC20': '0x745f4c684ab67fcf2b0fd414f344301d9eba7a42',
+                'BEP20': '0x745f4c684ab67fcf2b0fd414f344301d9eba7a42',
+                'TON': 'UQB8C1GhXqXY05h3iwQKJe-bwHWNrjE93I47w-kaYcwunm9C',
+                'SOL': '13yT63RCB288xyRoS158LTW1jox3eZhGbq',
+                'BTC': '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+                'ETH': '0x745f4c684ab67fcf2b0fd414f344301d9eba7a42'
+            };
+            return addresses[net] || addresses['TRC20'];
+        }
+
+        function copyDepositAddress() {
+            const input = document.getElementById('deposit-address');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            alert('Адрес скопирован в буфер обмена');
+        }
+
+        function submitDeposit() {
+            const amt = parseFloat(document.getElementById('deposit-amount-input').value);
+            const warning = document.getElementById('deposit-warning');
+            if(isNaN(amt) || amt < 30) {
+                warning.classList.remove('hidden');
+                return;
+            }
+            warning.classList.add('hidden');
+            document.getElementById('deposit-amount-input').disabled = true;
+            document.getElementById('deposit-submit-btn').classList.add('hidden');
+            document.getElementById('deposit-status-area').classList.remove('hidden');
+        }
+
+        function processWithdraw() {
+            const amt = parseFloat(document.getElementById('withdraw-amount').value);
+            if(isNaN(amt) || amt < 30) {
+                alert('Минимальная сумма вывода 30');
+                return;
+            }
+            if(amt > state.balance) {
+                alert('Недостаточно средств на балансе');
+                return;
+            }
+            state.balance -= amt;
+            updateUI();
+            closeModal('withdraw');
+            alert('Заявка на вывод успешно создана и обрабатывается шлюзом.');
+        }
+
+        function publishAd() {
+            const price = parseFloat(document.getElementById('ad-price').value);
+            const min = parseFloat(document.getElementById('ad-min').value);
+            const banner = document.getElementById('ad-error-banner');
+
+            if(state.balance < 30) {
+                banner.innerText = "Ошибка: Для публикации объявления ваш баланс должен быть не менее 30 USDT!";
+                banner.classList.remove('hidden');
+                return;
+            }
+            if(isNaN(price) || isNaN(min) || min < 30) {
+                banner.innerText = "Проверьте правильность введенных данных (мин. лимит от 30).";
+                banner.classList.remove('hidden');
+                return;
+            }
+            banner.classList.add('hidden');
+            closeModal('create-ad');
+            alert('Ваше объявление успешно опубликовано в стакане!');
+        }
+
+        function openTradeModal(orderId) {
+            const order = state.orders[state.activeTab][state.crypto].find(o => o.id === orderId);
+            if(!order) return;
+            state.selectedOrder = order;
+
+            const content = document.getElementById('trade-content');
+            content.innerHTML = `
+                <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                    <div>
+                        <h3 class="text-lg font-bold text-white">${state.activeTab === 'buy' ? 'Покупка' : 'Продажа'} ${state.crypto}</h3>
+                        <p class="text-xs text-gray-400">Мерчант: <span class="text-amber-400 font-semibold">${order.merchant}</span></p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm font-bold text-white">${order.price} ${state.fiat}</div>
+                        <div class="text-xs text-emerald-400">Оплата: ${order.payment}</div>
+                    </div>
+                </div>
+                <div id="trade-error-banner" class="hidden bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-xl"></div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs text-gray-400 mb-1 block">Сколько хотите отдать / получить (${state.fiat})</label>
+                        <input type="number" id="trade-calc-input" placeholder="Введите сумму..." class="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/50">
+                    </div>
+                    <div class="p-3 rounded-xl bg-black/40 border border-white/10 text-xs space-y-1 text-gray-300">
+                        <div class="flex justify-between"><span>Лимиты ордера:</span> <span class="font-semibold text-white">${order.limitsMin} - ${order.limitsMax} ${state.fiat}</span></div>
+                        <div class="flex justify-between"><span>Ваш баланс:</span> <span class="font-semibold text-amber-400">${state.balance.toFixed(2)} USDT</span></div>
+                    </div>
+                </div>
+            `;
+            openModal('trade');
+        }
+    </script>
+</body>
+</html>
